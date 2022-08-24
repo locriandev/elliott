@@ -450,6 +450,9 @@ class JIRABugTracker(BugTracker):
         return JIRABug(self._client.issue(bugid, **kwargs))
 
     def get_bugs(self, bugids: List[str], permissive=False, verbose=False, **kwargs) -> List[JIRABug]:
+        # When using Jira, filter out OCPBUGSM bugs
+        bugids = list(filter(lambda x: not x.startswith('OCPBUGSM'), bugids))
+
         if not bugids:
             return []
         query = self._query(bugids=bugids, with_target_release=False)
@@ -628,6 +631,9 @@ class BugzillaBugTracker(BugTracker):
         return BugzillaBug(self._client.getbug(bugid, **kwargs))
 
     def get_bugs(self, bugids, permissive=False, **kwargs):
+        # When using Bugzilla, bug IDs must be integers
+        bugids = list(filter(lambda x: isinstance(x, int), bugids))
+
         if not bugids:
             return []
         if 'verbose' in kwargs:
