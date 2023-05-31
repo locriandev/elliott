@@ -1,5 +1,6 @@
 import asyncio
 import base64
+import json
 from typing import Dict, Iterable, List, Set, Union
 from urllib.parse import quote, urlparse
 from aiohttp import ClientResponseError, ClientTimeout
@@ -9,7 +10,7 @@ import gssapi
 from elliottlib.exectools import limit_concurrency
 
 from elliottlib.rpm_utils import parse_nvr
-from elliottlib import constants, util, logutil
+from elliottlib import constants, util, logutil, exectools
 
 _LOGGER = logutil.getLogger(__name__)
 
@@ -95,16 +96,26 @@ class AsyncErrataAPI:
     @limit_concurrency(limit=16)
     async def get_advisories_for_jira(self, jira_key: str, ignore_not_found=False):
         path = f"/jira_issues/{quote(jira_key)}/advisories.json"
-        try:
-            result = await self._make_request(aiohttp.hdrs.METH_GET, path)
-        except ClientResponseError as e:
-            # When newly created jira bugs are not sync'd to ET we get a 404,
-            # assume that they are not attached to any advisory
-            if ignore_not_found and e.status == 404:
-                result = []
-            else:
-                raise
-        return result
+
+        url = f'{self._errata_url}{path}'
+        cmd = ['curl', '-qSfsw', "\n%{http_code}", '--negotiate', '--user', '":"', url]
+        rc, out, _ = await exectools.cmd_gather_async(cmd)
+
+        result, status = out.splitlines()
+        status = int(status)
+        _LOGGER.info(f'received result={result}, status={status}')
+
+        if status == 200:
+            try:
+                return json.loads(result)
+
+            except Exception as e:
+                _LOGGER.warning('unable to parse JSON out')
+                return []
+
+        if ignore_not_found and status == 404:
+            return []
+        raise RuntimeError(f'unexpected status: {status}')
 
     @limit_concurrency(limit=16)
     async def get_advisories_for_bug(self, bz_key: str):
