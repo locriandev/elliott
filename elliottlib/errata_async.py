@@ -48,13 +48,30 @@ class AsyncErrataAPI:
 
     async def get_advisory(self, advisory: Union[int, str]) -> Dict:
         path = f"/api/v1/erratum/{quote(str(advisory))}"
-        return await self._make_request(aiohttp.hdrs.METH_GET, path)
+
+        url = f'{self._errata_url}{path}'
+        cmd = ['curl', '--negotiate', '--user', '":"', url]
+        _LOGGER.info(f'running command: {" ".join(cmd)}')
+        _, out, err = await exectools.cmd_gather_async(cmd)
+
+        try:
+            return json.loads(out.strip())
+        except json.decoder.JSONDecodeError:
+            _LOGGER.error(f'error decoding output:\n{out}\n')
 
     async def get_builds(self, advisory: Union[int, str]):
         # As of May 25, 2023, /api/v1/erratum/{id}/builds_list doesn't return all builds.
         # Use /api/v1/erratum/{id}/builds instead.
         path = f"/api/v1/erratum/{quote(str(advisory))}/builds"
-        return await self._make_request(aiohttp.hdrs.METH_GET, path)
+        url = f'{self._errata_url}{path}'
+        cmd = ['curl', '--negotiate', '--user', '":"', url]
+        _LOGGER.info(f'running command: {" ".join(cmd)}')
+        _, out, err = await exectools.cmd_gather_async(cmd)
+
+        try:
+            return json.loads(out.strip())
+        except json.decoder.JSONDecodeError:
+            _LOGGER.error(f'error decoding output:\n{out}\n')
 
     async def get_builds_flattened(self, advisory: Union[int, str]) -> Set[str]:
         pv_builds = await self.get_builds(advisory)
