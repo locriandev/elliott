@@ -69,16 +69,34 @@ class AsyncErrataAPI:
 
     async def get_cve_package_exclusions(self, advisory_id: int):
         path = "/api/v1/cve_package_exclusion"
+
+        url = f'{self._errata_url}{path}'
         # This is a paginated API, we need to increment page[number] until an empty array is returned.
-        params = {"filter[errata_id]": str(int(advisory_id)), "page[number]": 1, "page[size]": 1000}
+        page_number = 1
+
         while True:
-            result = await self._make_request(aiohttp.hdrs.METH_GET, path, params=params)
+            _LOGGER.info(f'querying page {page_number}')
+            cmd = ['curl', '-X', 'GET', '-qSfsw', "\n%{http_code}", '--negotiate', '--user', '":"', url,
+                   '-d', f"'filter[errata_id]={advisory_id}'", '-d', f"'page[number]={page_number}'",
+                   '-d', "'page[size]=1000'"]
+            _, out, _ = await exectools.cmd_gather_async(cmd)
+
+            out = out.splitlines()[0].strip()
+
+            try:
+                result = json.loads(out)
+
+            except json.decoder.JSONDecodeError:
+                _LOGGER.error(f'failed parsing output:\n%s\n', out)
+                raise
+
             data: List[Dict] = result.get('data', [])
+
             if not data:
                 break
             for item in data:
                 yield item
-            params["page[number]"] += 1
+            page_number += 1
 
     async def create_cve_package_exclusion(self, advisory_id: int, cve: str, package: str):
         path = "/api/v1/cve_package_exclusion"
